@@ -1,23 +1,43 @@
 import pprint
 
-
-def parse_int(data, i):
+#converts bencoded int into bdecoded int
+def parse_int(data: bytes, i)-> int:
     assert data[i]== ord('i') 
+
+    #checks if there is missing "e"
+    if data.find(b'e' , i) == -1:
+        raise ValueError("Undetermined integer (missing 'e')")
+
     i+=1
     j = data.index(b'e' , i)
-    val = int(data[i : j])
-    return val , j+1
+    val = data[i : j] #converts the sliced value out into integer
 
-def parse_str(data , i ):
+    #checks if the bencoded int only consist of "0"
+    if val.startswith(b'0') and len(val)>1:
+        raise ValueError("Leading zero must not be there")
+    
+    #checks if the bencode int only has a single - value
+    if val == b'-':
+        raise ValueError("Malformed integer (only a minus sign)")
+
+    #checks if the bencode has a "-0"
+    if val.startswith(b'-0'):
+        raise ValueError("There should be no -0")
+    
+    #checks if the lenght of the data is "0"
+    if len(val)==0:
+        raise ValueError("Empty Integer")
+    
+    return int(val) , j+1
+
+def parse_str(data:bytes , i )-> bytes:
     j = data.index(b':' , i)
     length = int(data[i: j])
     j +=1 
     val = data[j : j+length ]
     return val  , j + length
-k = b"4:spam"
-print(parse_str(k,0))
 
-def parse_list(data , i):
+def parse_list(data:bytes, i) -> list:
     assert data[i] == ord('l')
     i+=1
     arr= []
@@ -28,7 +48,7 @@ def parse_list(data , i):
 
 
 
-def parse_dict(data , i ):
+def parse_dict(data:bytes , i )-> dict:
     assert data[i]== ord('d')
     i+=1 
     d={}
@@ -54,13 +74,25 @@ def parse_any(data , i):
 def bencoding(data):
     if isinstance(data , int):
         return f'i{data}e'.encode()
+    
     elif isinstance(data , bytes):
         return f'{len(data)}:'.encode() + data
+    
     elif isinstance(data, list):
-        encoded_data = [bencoding(item) for item in data]
-        return b'l' + b"".join(encoded_data) +b'e'
+        encoded_list = [bencoding(item) for item in data]
+        return b'l' + b"".join(encoded_list) +b'e'
+    
     elif isinstance(data , dict):
-        pass
-
+        arr = []
+        for key , value in sorted(data.items()):
+            if not isinstance(data, bytes):
+                raise TypeError(f'Bencode dictionary keys must be bytes , not {type(key)}')
+            arr.append(bencoding(key))
+            arr.append(bencoding(value))
+            
+        return b'd'+b''.join(arr)+b'e'
+    
+    else:
+        raise TypeError(f'{type(data)} is not supported by the Bencoder')
 
 
