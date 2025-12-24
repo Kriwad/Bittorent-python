@@ -67,9 +67,12 @@ def parse_list(data:bytes, i:int , depth:int) -> list:
     
     i+=1
     arr= []
-    while data[i] != ord('e'):
+    while i>= len(data) and data[i] != ord('e'):
         val , i  = parse_any(data , i , depth)
         arr.append(val)
+
+    if i >= len(data) and data[i] != ord('e'):
+        raise ValueError("List never closed: Missing 'e'")
     return arr , i+1
 
 
