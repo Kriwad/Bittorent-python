@@ -1,7 +1,7 @@
 import pprint
 
 #converts bencoded int into bdecoded int
-def parse_int(data: bytes, i)-> int:
+def parse_int(data: bytes, i:int)-> tuple[int , int]:
     assert data[i]== ord('i') 
 
     #checks if there is missing "e"
@@ -30,14 +30,30 @@ def parse_int(data: bytes, i)-> int:
     
     return int(val) , j+1
 
-def parse_str(data:bytes , i )-> bytes:
-    j = data.index(b':' , i)
-    length = int(data[i: j])
-    j +=1 
-    val = data[j : j+length ]
-    return val  , j + length
+def parse_str(data:bytes , i:int )-> tuple[bytes , int]:
 
-def parse_list(data:bytes, i) -> list:
+    j = data.find(b':' , i)
+    if j == -1:
+        raise ValueError("Undetermined byte . Missing ':'")
+    
+    length_bytes = data[i: j]
+
+    if not length_bytes.isdigit():
+        raise ValueError("The length must be an integer value and shouldnt contain any -value")
+        
+    if len(length_bytes) > 1 and length_bytes.startswith(b'0'):
+        raise ValueError("Leadin zeros are not allowed in string length")
+    
+    start= j +1
+    end = start+ int(length_bytes)
+
+    if end > len(data):
+        raise IndexError("Data out of index")
+
+    val = data[start : end]
+    return val  , end
+
+def parse_list(data:bytes, i:int) -> list:
     assert data[i] == ord('l')
     i+=1
     arr= []
@@ -65,7 +81,7 @@ def parse_any(data , i):
         return parse_int(data , i)
     elif data[i] == ord('d'):
         return parse_dict(data , i)
-    elif chr(data[i]).isdigit():
+    elif ord('0') <= data[i] <= ord('9'):
         return parse_str(data , i)
     else:
         return data , i
