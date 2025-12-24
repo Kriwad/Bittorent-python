@@ -1,6 +1,6 @@
 import pprint
 
-#converts bencoded int into bdecoded int
+#converts bytes into int
 def parse_int(data: bytes, i:int)-> tuple[int , int]:
     assert data[i]== ord('i') 
 
@@ -30,6 +30,7 @@ def parse_int(data: bytes, i:int)-> tuple[int , int]:
     
     return int(val) , j+1
 
+#converts bytes into str'bytes' 
 def parse_str(data:bytes , i:int )-> tuple[bytes , int]:
 
     j = data.find(b':' , i)
@@ -48,17 +49,26 @@ def parse_str(data:bytes , i:int )-> tuple[bytes , int]:
     end = start+ int(length_bytes)
 
     if end > len(data):
-        raise IndexError("Data out of index")
+        raise IndexError("Data out of range")
 
     val = data[start : end]
     return val  , end
 
-def parse_list(data:bytes, i:int) -> list:
+#converts bytes into a list
+def parse_list(data:bytes, i:int , depth:int) -> list:
+
+    if len(data) -i < 2:
+        raise IndexError("Data out of range")
+
     assert data[i] == ord('l')
+    j = data.find(b'e' , i)
+    if j == -1:
+        raise ValueError("Undetermined list , Mising 'e'")
+    
     i+=1
     arr= []
     while data[i] != ord('e'):
-        val , i  = parse_any(data , i)
+        val , i  = parse_any(data , i , depth)
         arr.append(val)
     return arr , i+1
 
@@ -74,9 +84,13 @@ def parse_dict(data:bytes , i )-> dict:
         d[keys] = value
     return d , i+1
 
-def parse_any(data , i):
+def parse_any(data , i , depth:int = 0 ):
+
+    if depth > 100:
+        raise ValueError("Nesting too deep! Possible bencode Bomb")
+
     if data[i] == ord('l'):
-        return parse_list(data , i)
+        return parse_list(data , i , depth+1)
     elif data[i] == ord('i'):
         return parse_int(data , i)
     elif data[i] == ord('d'):
@@ -86,6 +100,15 @@ def parse_any(data , i):
     else:
         return data , i
 
+def bdecode(data:bytes):
+    if not isinstance(data, bytes):
+        raise ValueError("Data must be byte string")
+    if not data:
+        raise ValueError("The data is empty")
+    result , index = parse_any(data , 0)
+    if index < len(data):
+        raise ValueError("Trailing data after bencode object")
+    return result
 
 def bencoding(data):
     if isinstance(data , int):
