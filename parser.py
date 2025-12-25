@@ -12,7 +12,7 @@ def parse_int(data: bytes, i:int)-> tuple[int , int]:
     j = data.index(b'e' , i)
     val = data[i : j] #converts the sliced value out into integer
 
-    #checks if the bencoded int only consist of "0"
+    #checks if the bencoded int consist of leading"0"
     if val.startswith(b'0') and len(val)>1:
         raise ValueError("Leading zero must not be there")
     
@@ -55,9 +55,9 @@ def parse_str(data:bytes , i:int )-> tuple[bytes , int]:
     return val  , end
 
 #converts bytes into a list
-def parse_list(data:bytes, i:int , depth:int) -> list:
+def parse_list(data:bytes, i:int , depth:int) -> tuple[list , int]:
 
-    if len(data) -i < 2:
+    if len(data)-i < 2:
         raise IndexError("Data out of range")
 
     assert data[i] == ord('l')
@@ -67,41 +67,55 @@ def parse_list(data:bytes, i:int , depth:int) -> list:
     
     i+=1
     arr= []
-    while i>= len(data) and data[i] != ord('e'):
+    while i< len(data) and data[i] != ord('e'):
         val , i  = parse_any(data , i , depth)
         arr.append(val)
 
-    if i >= len(data) and data[i] != ord('e'):
+    if i >= len(data) or data[i] != ord('e'):
         raise ValueError("List never closed: Missing 'e'")
     return arr , i+1
 
 
 
-def parse_dict(data:bytes , i )-> dict:
+def parse_dict(data:bytes , i ,depth:int)-> tuple[dict , int]:
     assert data[i]== ord('d')
     i+=1 
     d={}
-    while data[i] != ord('e'):
-        keys , i = parse_str(data , i )
-        value , i = parse_any(data , i)
-        d[keys] = value
+    last_key = None
+    while i<len(data)and  data[i] != ord('e'):
+        key_bytes , i = parse_str(data , i )
+        if last_key is not None and key_bytes<=last_key :
+            if key_bytes == last_key:
+                raise ValueError(f"Duplicate key is found {key_bytes}")
+            else:
+                raise ValueError(f"Keys not sorted: {key_bytes} should come before {last_key}")
+            
+        last_key = key_bytes
+        key_str = key_bytes.decode('utf-8')
+
+        value , i = parse_any(data , i, depth)
+        d[key_str] = value
+
+    if i >= len(data) or data[i]!= ord('e'):
+        raise ValueError("Dictionary never closed: Missing 'e'")
     return d , i+1
 
 def parse_any(data , i , depth:int = 0 ):
 
     if depth > 100:
         raise ValueError("Nesting too deep! Possible bencode Bomb")
-
+    if i > len(data):
+        raise ValueError("Unexpected end of data")
     if data[i] == ord('l'):
         return parse_list(data , i , depth+1)
     elif data[i] == ord('i'):
         return parse_int(data , i)
     elif data[i] == ord('d'):
-        return parse_dict(data , i)
+        return parse_dict(data , i , depth+1)
     elif ord('0') <= data[i] <= ord('9'):
         return parse_str(data , i)
     else:
-        return data , i
+        raise ValueError(f'Unknoen bencode type marker: {data[i]} , at index {i}')
 
 def bdecode(data:bytes):
     if not isinstance(data, bytes):
@@ -109,8 +123,9 @@ def bdecode(data:bytes):
     if not data:
         raise ValueError("The data is empty")
     result , index = parse_any(data , 0)
+    #checks if there is any garbage value after the byte
     if index < len(data):
-        raise ValueError("Trailing data after bencode object")
+        raise ValueError(f"Trailing data after bencode object at index: {index}")
     return result
 
 def bencoding(data):
@@ -120,21 +135,44 @@ def bencoding(data):
     elif isinstance(data , bytes):
         return f'{len(data)}:'.encode() + data
     
+    elif isinstance(data , str):
+        byte_str = data.encode('utf-8')
+        return f'{len(byte_str)}:'.encode() + byte_str
+    
     elif isinstance(data, list):
         encoded_list = [bencoding(item) for item in data]
         return b'l' + b"".join(encoded_list) +b'e'
     
     elif isinstance(data , dict):
-        arr = []
-        for key , value in sorted(data.items()):
-            if not isinstance(data, bytes):
-                raise TypeError(f'Bencode dictionary keys must be bytes , not {type(key)}')
-            arr.append(bencoding(key))
-            arr.append(bencoding(value))
+        items = []
+        byte_items = []
+        for key , value in data.items():
+            key_bytes = key.encode('utf-8') if isinstance(key , str) else key
+            byte_items.append((key_bytes , value))
+        
+        for key,value in sorted(byte_items):
+            items.append(bencoding(key))
+            items.append(bencoding(value))
             
-        return b'd'+b''.join(arr)+b'e'
+        return b'd'+b''.join(items)+b'e'
     
     else:
         raise TypeError(f'{type(data)} is not supported by the Bencoder')
 
 
+def read_torent(torent):
+    with open( torent , 'rb' ) as file:
+        torrent_data = file.read()
+
+    decoded = bdecode(torrent_data)
+    pprint(decoded[b'info'])
+
+test_data = {
+    "announce": "http://tracker.com",
+    "info": {
+        "name": "My Movie 🚀",
+        "piece length": 262144,
+        "length": 5000000
+    },
+    "list_test": [1, 2, "three"]
+}
