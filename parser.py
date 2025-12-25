@@ -128,7 +128,7 @@ def bdecode(data:bytes):
         raise ValueError(f"Trailing data after bencode object at index: {index}")
     return result
 
-def bencoding(data):
+def bencode(data):
     if isinstance(data , int):
         return f'i{data}e'.encode()
     
@@ -140,7 +140,7 @@ def bencoding(data):
         return f'{len(byte_str)}:'.encode() + byte_str
     
     elif isinstance(data, list):
-        encoded_list = [bencoding(item) for item in data]
+        encoded_list = [bencode(item) for item in data]
         return b'l' + b"".join(encoded_list) +b'e'
     
     elif isinstance(data , dict):
@@ -151,8 +151,8 @@ def bencoding(data):
             byte_items.append((key_bytes , value))
         
         for key,value in sorted(byte_items):
-            items.append(bencoding(key))
-            items.append(bencoding(value))
+            items.append(bencode(key))
+            items.append(bencode(value))
             
         return b'd'+b''.join(items)+b'e'
     
@@ -160,19 +160,3 @@ def bencoding(data):
         raise TypeError(f'{type(data)} is not supported by the Bencoder')
 
 
-def read_torent(torent):
-    with open( torent , 'rb' ) as file:
-        torrent_data = file.read()
-
-    decoded = bdecode(torrent_data)
-    pprint(decoded[b'info'])
-
-test_data = {
-    "announce": "http://tracker.com",
-    "info": {
-        "name": "My Movie 🚀",
-        "piece length": 262144,
-        "length": 5000000
-    },
-    "list_test": [1, 2, "three"]
-}
