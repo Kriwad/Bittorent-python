@@ -40,13 +40,19 @@ def get_peers_from_tracker(torent_file, port = 6881):
     else:
         print(f"Failed to reach tracker:{response.status_code}")
 
-    peers= tracker_detail['peer']
-     
-    for peer in range(0 , len(peers) , 6):
-        peer_bytes = peers[i:i+6]
+    peers_blob= tracker_detail[b'peer']
+    discovered_peers = []
+    
+    for i in range(0 , len(peers_blob) , 6):
+        peer_bytes = peers_blob[i: i+6]
 
-        ip_address = peer_bytes[:4]
+        ip = ".".join(str(b) for b in peer_bytes[:4])
+        port = int.from_bytes(peer_bytes[4:] , byteorder='big')
 
+        discovered_peers.append([ip , port])
+    
+
+        
 
 
 
