@@ -95,7 +95,7 @@ def parse_dict(data:bytes , i ,depth:int)-> tuple[dict , int]:
 
         value , i = parse_any(data , i, depth)
         d[key_str] = value
-
+        
     if i >= len(data) or data[i]!= ord('e'):
         raise ValueError("Dictionary never closed: Missing 'e'")
     return d , i+1
