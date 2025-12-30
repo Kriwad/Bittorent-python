@@ -8,10 +8,12 @@ def get_peers_from_tracker(torent_file, port = 6881):
         torent_content = f.read()
 
     decoded_file = bdecode(torent_content)
+    #checks if announce os there in torrent file 
     if b'announce' not in decoded_file:
         raise ValueError("Torrent file missing 'announce'")
     
     tracker_urls = []
+    #checks if there is announce and announce-list
     if b'announce' in decoded_file:
         tracker_urls.append(decoded_file['announce'].decode('utf-8'))
     
@@ -22,15 +24,18 @@ def get_peers_from_tracker(torent_file, port = 6881):
                 if url not in tracker_urls and url.startswith("http"):
                     tracker_urls.append(url)
 
-    info_dict = decoded_file['info']
+    info_dict = decoded_file[b'info']
     info_hash = hashlib.sha1(bencode(info_dict)).digest()
 
+    #returns 0 if there is no length in the info dictionary
     if b'length' in info_dict:
-        left = info_dict.get('length' , 0)
+        left = info_dict[b'length']
+
+    #checks if there is list of files instead of length
     elif b'files' in info_dict:
         left = sum(f[b'length'] for f in info_dict[b'files'])
     else:
-        raise ValueError(f"Torrent file missing 'lenght' and 'file key' ")
+        raise ValueError(f"Torrent file missing 'length' and 'file key' ")
 
     my_id = b'-PC0001-' + secrets.token_bytes(12)
 
@@ -44,41 +49,52 @@ def get_peers_from_tracker(torent_file, port = 6881):
         'port': port,
         'event': 'started'
     }
-
+    #list to store the discovered peers
     discovered_peers = []
+
+    #looping throught the uel we got 
     for url in tracker_urls:
 
+        #trying to see if the tracker server is hanging or not
         try:
             if not url.startswith('http'):
                 continue
+
             if '/scrape' in url:
                 url = url.replace('/scrape', '/announce')
 
             response = requests.get(url , params , timeout = 10)
             response.raise_for_status()
+
+        #continues to try the other url if one is hanging
         except requests.exceptions.RequestException as e:
             print(f"connection to traker failes:{e}")
             continue
+
 
         if response.status_code == 200:
             tracker_detail = bdecode(response.content)
             print("Tracker reached successfully")
 
+        #sends error message if the tracker send some failure reason
             if b'failure reason' in tracker_detail:
                 error_msg = tracker_detail[b'failure reason'].decode()
                 print(f"Tracker reason {error_msg}")
                 return []
             
+            #sees if the tracker sent the list of peer or not
             if b'peers' not in tracker_detail:
                 raise ValueError(f"Tracker response missing 'peers' key ")
             
             peers_blob= tracker_detail[b'peers']
 
+            #handles if the peers are in list instead of compact 1 format
             if isinstance(peers_blob , list):
                 for p in peers_blob:
                     ip = p[b'ip'].decode()
                     port = p[b'port']
                     discovered_peers.append([ip , port])
+            #Handles when the peers repsonse is in bytes
             elif isinstance(peers_blob , bytes):
                 if len(peers_blob) % 6 != 0:
                     raise ValueError("Invalid compact peers format")
@@ -88,6 +104,8 @@ def get_peers_from_tracker(torent_file, port = 6881):
                     ip = ".".join(str(b) for b in peer_bytes[:4])
                     port = int.from_bytes(peer_bytes[4:] , byteorder='big')
                     discovered_peers.append([ip , port])
+                    
+            #continues with other url if the peer format is unkown 
             else:
                 print(f"Unknown peers format from {url}, skipping...")
                 continue
