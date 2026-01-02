@@ -52,7 +52,7 @@ def get_peers_from_tracker(torent_file, port = 6881):
     #list to store the discovered peers
     discovered_peers = []
 
-    #looping throught the uel we got 
+    #looping throught the url we got 
     for url in tracker_urls:
 
         #trying to see if the tracker server is hanging or not
@@ -75,11 +75,16 @@ def get_peers_from_tracker(torent_file, port = 6881):
 
         #sends error message if the tracker send some failure reason
             if b'failure reason' in tracker_detail:
-                error_msg = tracker_detail[b'failure reason'].decode()
+                error_msg = tracker_detail[b'failure reason'].decode('utf-8')
                 print(f"Tracker reason {error_msg}")
-                return []
+                continue
             
-            # sees if the tracker sent the list of peer or not
+        #shows small notes that the tracker might have for you
+            if b'warning message' in tracker_detail:
+                warning = tracker_detail[b'warning message'].decode('utf-8')
+                print(f'Tracker warning ({url}): {warning}')
+
+        # sees if the tracker sent the list of peer or not
             if b'peers' in tracker_detail:
                 peers_blob= tracker_detail[b'peers']
             
@@ -93,8 +98,8 @@ def get_peers_from_tracker(torent_file, port = 6881):
             #handles if the peers are in list instead of compact 1 format
             if isinstance(peers_blob , list):
                 for p in peers_blob:
-                    ip = p.get(b'ip').decode('utf-8')
-                    port = p.get(b'port')
+                    ip = p.get(b'ip' , b"").decode('utf-8')
+                    port = p.get(b'port' , 0)
                     if ip and port:
                         discovered_peers.append([ip , port])
                     else:
@@ -102,7 +107,7 @@ def get_peers_from_tracker(torent_file, port = 6881):
             #Handles when the peers repsonse is in bytes
             elif isinstance(peers_blob , bytes): 
 
-                stride = 19 if b'peers6' in tracker_detail and peers_blob == tracker_detail[b'peers6'] else 6
+                stride = 18 if b'peers6' in tracker_detail and peers_blob == tracker_detail[b'peers6'] else 6
 
 
                 if len(peers_blob) % stride != 0:
@@ -111,7 +116,7 @@ def get_peers_from_tracker(torent_file, port = 6881):
                 
                 for i in range(0 , len(peers_blob) , stride):
                     ip_bytes = peers_blob[i: i+(stride-2)]
-                    port_bytes = peers_blob[i+(stride-2) :  ]
+                    port_bytes = peers_blob[i+(stride-2) :  i+stride]
                     port = int.from_bytes(port_bytes , byteorder='big')
 
                     if stride == 6:
@@ -119,7 +124,10 @@ def get_peers_from_tracker(torent_file, port = 6881):
                     else:
                         import ipaddress
                         ip = str(ipaddress.IPv6Address(ip_bytes))
-
+                    
+                    if ip == '0.0.0.0' or ip == "::" or port == 0:
+                        continue
+                    
                     discovered_peers.append([ip , port])
                     
             #continues with other url if the peer format is unkown 
@@ -136,8 +144,8 @@ def get_peers_from_tracker(torent_file, port = 6881):
             
 
     
-
-    return discovered_peers , info_hash , my_id
+    print(f"Total unique peers found: {len(unique_peer)}")
+    return unique_peer , info_hash , my_id
 
 
     
