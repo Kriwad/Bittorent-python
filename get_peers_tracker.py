@@ -57,10 +57,31 @@ def get_peers_from_tracker(torent_file, port = 6881):
 
         #trying to see if the tracker server is hanging or not
         try:
+
+            import urllib.parse
+            #turn characters like . / and space into a % symbol followed by its hex code
+            encoded_info_hash = urllib.parse(info_dict, safe = '')
+            encoded_peer_id = urllib.parse(my_id, safe = '' )
+
+            query_string = {
+                f"info_hash={encoded_info_hash}"
+                f"&peer_id={encoded_peer_id}"
+                f"&port={params["port"]}"
+                f"&uploaded={params["uploaded"]}"
+                f"&downloaded={params["downloaded"]}"
+                f"&compact={params["compact"]}"
+                f"&event={params["event"]}"
+                f"&left={params["left"]}"
+            }
             if '/scrape' in url:
                 url = url.replace('/scrape', '/announce')
+            
+            connector = "&" if "?" in url else "?"
+            full_url = f"{url}{connector}{query_string}"
 
-            response = requests.get(url , params , timeout = 10)
+            headers= {"User_Agent":"BitTorrent/1.0"}
+
+            response = requests.get(full_url , headers=headers , timeout = 10)
             response.raise_for_status()
 
         #continues to try the other url if one is hanging
@@ -97,7 +118,6 @@ def get_peers_from_tracker(torent_file, port = 6881):
                 print(f"Skipping {url}: No peers or peers6 key found")
                 continue 
             
-
             #handles if the peers are in list instead of compact 1 format
             for peers_blob , stride in current_peer_blobs:
 
@@ -143,17 +163,7 @@ def get_peers_from_tracker(torent_file, port = 6881):
         if (ip , port) not in seen_peer:
             unique_peer.append([ip , port])
             seen_peer.add((ip , port))
-            
 
-    
     print(f"Total unique peers found: {len(unique_peer)}")
     return unique_peer , info_hash , my_id
-
-
-    
-
-        
-
-
-
 
