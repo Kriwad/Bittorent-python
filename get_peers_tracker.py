@@ -85,50 +85,52 @@ def get_peers_from_tracker(torent_file, port = 6881):
                 print(f'Tracker warning ({url}): {warning}')
 
         # sees if the tracker sent the list of peer or not
+            current_peer_blobs = [] 
             if b'peers' in tracker_detail:
-                peers_blob= tracker_detail[b'peers']
+                current_peer_blobs.append((tracker_detail[b'peers'] , 6))
             
-            elif b'peers6' in tracker_detail:
-                peers_blob = tracker_detail[b'peers6']
-            else:
+            if b'peers6' in tracker_detail:
+                current_peer_blobs.append((tracker_detail[b'peers6'], 18))
+            
+            if not current_peer_blobs:
+
                 print(f"Skipping {url}: No peers or peers6 key found")
                 continue 
             
 
             #handles if the peers are in list instead of compact 1 format
-            if isinstance(peers_blob , list):
-                for p in peers_blob:
-                    ip = p.get(b'ip' , b"").decode('utf-8')
-                    port = p.get(b'port' , 0)
-                    if ip and port:
-                        discovered_peers.append([ip , port])
-                    else:
-                        print("Found a malformed peer entry in list , skipping one peer....")
-            #Handles when the peers repsonse is in bytes
-            elif isinstance(peers_blob , bytes): 
+            for peers_blob , stride in current_peer_blobs:
 
-                stride = 18 if b'peers6' in tracker_detail and peers_blob == tracker_detail[b'peers6'] else 6
+                if isinstance(peers_blob , list):
+                    for p in peers_blob:
+                        ip = p.get(b'ip' , b"").decode('utf-8')
+                        port = p.get(b'port' , 0)
+                        if ip and port:
+                            discovered_peers.append([ip , port])
+                        else:
+                            print("Found a malformed peer entry in list , skipping one peer....")
+                #Handles when the peers repsonse is in bytes
+                elif isinstance(peers_blob , bytes): 
 
-
-                if len(peers_blob) % stride != 0:
-                    print(f"Skipping {url}: Compact list length is not a multiple of {stride}")
-                    continue
-                
-                for i in range(0 , len(peers_blob) , stride):
-                    ip_bytes = peers_blob[i: i+(stride-2)]
-                    port_bytes = peers_blob[i+(stride-2) :  i+stride]
-                    port = int.from_bytes(port_bytes , byteorder='big')
-
-                    if stride == 6:
-                        ip = ".".join(map(str , ip_bytes))
-                    else:
-                        import ipaddress
-                        ip = str(ipaddress.IPv6Address(ip_bytes))
-                    
-                    if ip == '0.0.0.0' or ip == "::" or port == 0:
+                    if len(peers_blob) % stride != 0:
+                        print(f"Skipping {url}: Compact list length is not a multiple of {stride}")
                         continue
                     
-                    discovered_peers.append([ip , port])
+                    for i in range(0 , len(peers_blob) , stride):
+                        ip_bytes = peers_blob[i: i+(stride-2)]
+                        port_bytes = peers_blob[i+(stride-2) :  i+stride]
+                        port = int.from_bytes(port_bytes , byteorder='big')
+
+                        if stride == 6:
+                            ip = ".".join(map(str , ip_bytes))
+                        else:
+                            import ipaddress
+                            ip = str(ipaddress.IPv6Address(ip_bytes))
+                        
+                        if ip == '0.0.0.0' or ip == "::" or port == 0:
+                            continue
+                        
+                        discovered_peers.append([ip , port])
                     
             #continues with other url if the peer format is unkown 
             else:
